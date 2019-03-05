@@ -537,6 +537,39 @@ int luaRedisGenericCommand(lua_State *lua, int raise_error) {
         }
     }
 
+    if (server.hashtag_verification_enabled) {
+        robj *firstkey = NULL;
+        int i = 0, slot = 0;
+
+        for (i = 0; i < c->mstate.count; i++) {
+            struct redisCommand *mcmd;
+            robj **margv;
+            int margc, *keyindex, numkeys, j;
+
+            mcmd = c->mstate.commands[i].cmd;
+            margc = c->mstate.commands[i].argc;
+            margv = c->mstate.commands[i].argv;
+
+            keyindex = getKeysFromCommand(mcmd, margv, margc, &numkeys);
+            for (j = 0; j < numkeys; j++) {
+                robj *thiskey = margv[keyindex[j]];
+                int thisslot = keyHashSlot((char*)thiskey->ptr, sdslen(thiskey->ptr));
+
+                if (firstkey == NULL) {
+                    firstkey = thiskey;
+                    slot = thisslot;
+                } else {
+                    if (!equalStringObjects(firstkey, thiskey) && slot != thisslot) {
+                        getKeysFreeResult(keyindex);
+                        luaPushError(lua, "Lua script attempted to access a potentially non local key");
+                        goto cleanup;
+                    }
+                }
+                getKeysFreeResult(keyindex);
+            }
+        }
+    }
+
     /* If we are using single commands replication, we need to wrap what
      * we propagate into a MULTI/EXEC block, so that it will be atomic like
      * a Lua script in the context of AOF and slaves. */

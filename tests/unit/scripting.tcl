@@ -628,6 +628,28 @@ foreach cmdrepl {0 1} {
     }
 }
 
+start_server {tags {"scripting verification"}} {
+    start_server {overrides {hashtag-verification-enabled yes}} {
+        test "EVAL fails when keys are not using the same hashtag" {
+            catch {
+                r eval {
+                    return redis.call('set', '{foo}.lol', 'bar');
+                } 1 '{baz}.lol'
+            } e
+            set e
+        } {*access a potentially non local key*}
+
+        test "EVAL fails when using different keys" {
+            catch {
+                r eval {
+                    return redis.call('set', 'foo', 'bar');
+                } 1 'baz'
+            } e
+            set e
+        } {*access a potentially non local key*}
+    }
+}
+
 start_server {tags {"scripting repl"}} {
     start_server {overrides {appendonly yes}} {
         test "Connect a slave to the master instance" {
